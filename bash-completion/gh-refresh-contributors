@@ -1,0 +1,23 @@
+# bash completion for gh-refresh-contributors
+# Author: Lenik <gh-refresh-contributors@bodz.net>
+# License: GPL-2.0-or-later
+
+_gh_refresh_contributors() {
+    local cur prev words cword
+    _init_completion -s || return
+
+    case "$prev" in
+        -b|--branch|-t|--tmp-branch)
+            return
+            ;;
+    esac
+
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W '-b --branch -t --tmp-branch -v --verbose -q --quiet -h --help' -- "$cur"))
+        return
+    fi
+
+    return
+}
+
+complete -F _gh_refresh_contributors gh-refresh-contributors

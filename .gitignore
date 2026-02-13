@@ -1,0 +1,18 @@
+# Debian build
+debian/files
+debian/.debhelper/
+debian/debhelper-*
+debian/gh-refresh-contributors*
+*.deb
+*.buildinfo
+*.changes
+*.dsc
+*.tar.*
+
+# Editor / OS
+*~
+.*.sw?
+.DS_Store
+
+# Local
+*.local

@@ -1,0 +1,18 @@
+Source: gh-refresh-contributors
+Section: devel
+Priority: optional
+Maintainer: Lenik <gh-refresh-contributors@bodz.net>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: gh-refresh-contributors
+Architecture: all
+Depends: git (>= 1:2), gh, ${misc:Depends}
+Description: Force GitHub to refresh the contributors list
+ gh-refresh-contributors temporarily renames the repository default branch
+ (e.g. main or master) to a temporary name and renames it back, which triggers
+ GitHub to refresh the repository contributors list on the web interface.
+ .
+ Requires a GitHub CLI (gh) authenticated session and a git repo with
+ remote "origin" pointing to the GitHub repository.

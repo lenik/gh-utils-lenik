@@ -1,0 +1,212 @@
+#!/bin/bash
+    : ${RCSID:=$Id: gh-refresh-contributors 1.0 2025-02-13 - $}
+    : ${PROGRAM_TITLE:="Force GitHub to refresh the contributors list by temporarily renaming the default branch"}
+    : ${PROGRAM_SYNTAX:="[OPTIONS]"}
+
+    . shlib-import cliboot
+
+    option -b --branch =NAME     "Branch to use (default: main or master)"
+    option -t --tmp-branch =NAME "Temporary branch name (default: temp-refresh-branch)"
+    option -v --verbose         "Verbose logging"
+    option -q --quiet
+    option -h --help
+
+    opt_branch=
+    opt_tmp_branch=temp-refresh-branch
+
+    function setopt() {
+        case "$1" in
+            -b|--branch)
+                opt_branch="$2";;
+            -t|--tmp-branch)
+                opt_tmp_branch="$2";;
+            -q|--quiet)
+                (( LOGLEVEL-- ));;
+            -v|--verbose)
+                (( LOGLEVEL++ ));;
+            -h|--help)
+                help $1; exit;;
+            *)
+                quit "invalid option: $1";;
+        esac
+    }
+
+    # ---- Helpers (used by main) ----
+    gh_default_branch_stderr=
+    gh_default_branch_exit=0
+    function gh_default_branch() {
+        gh_default_branch_stderr=
+        gh_default_branch_exit=0
+        local out r
+        out=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>&1)
+        r=$?
+        if [ $r -ne 0 ]; then
+            gh_default_branch_stderr="$out"
+            gh_default_branch_exit=$r
+            out=""
+        fi
+        printf '%s' "$out"
+    }
+
+    function detect_branch() {
+        if [ -n "$opt_branch" ]; then
+            _log1 "Using branch from option: $opt_branch"
+            return
+        fi
+        _log1 "Detecting branch from remote (main/master)..."
+        for b in main master; do
+            if git rev-parse --verify "origin/$b" &>/dev/null; then
+                opt_branch="$b"
+                _log1 "  detected branch: $opt_branch"
+                return
+            fi
+        done
+        quit "Could not detect branch (no origin/main or origin/master). Use -b NAME."
+    }
+
+    function check_prereqs() {
+        _log1 "Checking prerequisites..."
+        git rev-parse --is-inside-work-tree &>/dev/null || quit "Not inside a git repository."
+        _log1 "  inside git repo"
+        git remote get-url origin &>/dev/null || quit "No remote 'origin'."
+        _log1 "  remote origin: $(git remote get-url origin 2>/dev/null)"
+        command -v gh &>/dev/null || quit "gh CLI not found."
+        gh auth status -h github.com &>/dev/null || quit "gh not authenticated."
+        _log1 "  gh authenticated"
+    }
+
+    # ---- Steps with state checks ----
+    # Step 1: push temp branch (GitHub requires the branch to exist before setting it as default)
+    function push_tmp_branch() {
+        local current
+        current=$(git branch --show-current)
+        _log1 "Current local branch: $current"
+        if [ "$current" = "$opt_tmp_branch" ]; then
+            if git rev-parse --verify "origin/$opt_tmp_branch" &>/dev/null; then
+                echo "  Local branch is already '$opt_tmp_branch' and remote exists; continuing."
+                _log1 "  (resume) local and remote tmp branch exist"
+                return 0
+            fi
+            echo "  Pushing existing local '$opt_tmp_branch'."
+            run git push --force origin "$opt_tmp_branch"
+            return 0
+        fi
+        [ "$current" = "$opt_branch" ] || quit "Current branch is '$current', expected '$opt_branch'. Checkout $opt_branch first."
+        _log1 "Renaming local $opt_branch -> $opt_tmp_branch and pushing"
+        run git branch -m "$opt_branch" "$opt_tmp_branch"
+        # Temp branch is ephemeral; force so leftover from a previous run doesn't cause non-fast-forward
+        run git push --force origin "$opt_tmp_branch"
+        git rev-parse --verify "origin/$opt_tmp_branch" &>/dev/null || quit "Remote $opt_tmp_branch not found after push."
+    }
+
+    function set_default_to_tmp() {
+        local default
+        default=$(gh_default_branch)
+        if [ -z "$default" ]; then
+            if [ -n "$gh_default_branch_stderr" ]; then
+                [ "$LOGLEVEL" -ge 1 ] && echo "  gh stderr: $gh_default_branch_stderr" >&2
+                quit "Could not get GitHub default branch. Run with -v to see gh output."
+            else
+                quit "Could not get GitHub default branch (gh exited ${gh_default_branch_exit:-?}; check repo and 'gh auth status')."
+            fi
+        fi
+        _log1 "GitHub default branch: $default"
+        if [ "$default" = "$opt_tmp_branch" ]; then
+            echo "  GitHub default is already '$opt_tmp_branch'; continuing (possible resume)."
+            _log1 "  (resume) default already set to tmp"
+            return 0
+        fi
+        if [ "$default" != "$opt_branch" ]; then
+            quit "GitHub default branch is '$default', expected '$opt_branch'. Use -b $default or fix state."
+        fi
+        git rev-parse --verify "origin/$opt_tmp_branch" &>/dev/null || quit "Remote $opt_tmp_branch must exist before setting default (run previous step)."
+        _log1 "Setting GitHub default to $opt_tmp_branch"
+        run gh repo edit --default-branch "$opt_tmp_branch"
+        default=$(gh_default_branch)
+        [ "$default" = "$opt_tmp_branch" ] || quit "Failed to set default branch to $opt_tmp_branch (got: $default)."
+        _log1 "  default is now: $default"
+    }
+
+    function delete_remote_old() {
+        if ! git rev-parse --verify "origin/$opt_branch" &>/dev/null; then
+            echo "  Remote '$opt_branch' already gone; continuing."
+            _log1 "  (resume) remote $opt_branch already deleted"
+            return 0
+        fi
+        _log1 "Deleting remote branch $opt_branch"
+        run git push origin --delete "$opt_branch"
+        ! git rev-parse --verify "origin/$opt_branch" &>/dev/null || quit "Remote $opt_branch still exists after delete."
+    }
+
+    function rename_back_and_push() {
+        local current
+        current=$(git branch --show-current)
+        _log1 "Current local branch: $current"
+        [ "$current" = "$opt_tmp_branch" ] || quit "Current branch is '$current', expected '$opt_tmp_branch'."
+        _log1 "Renaming local $opt_tmp_branch -> $opt_branch and pushing"
+        run git branch -m "$opt_tmp_branch" "$opt_branch"
+        run git push origin "$opt_branch"
+        git rev-parse --verify "origin/$opt_branch" &>/dev/null || quit "Remote $opt_branch not found after push."
+    }
+
+    function restore_default() {
+        local default
+        default=$(gh_default_branch)
+        _log1 "GitHub default branch (before restore): ${default:-<empty>}"
+        if [ "$default" = "$opt_branch" ]; then
+            echo "  GitHub default is already '$opt_branch'; done."
+            _log1 "  (resume) default already $opt_branch"
+            return 0
+        fi
+        [ "$default" = "$opt_tmp_branch" ] || quit "GitHub default is '$default'; expected $opt_tmp_branch before restore."
+        git rev-parse --verify "origin/$opt_branch" &>/dev/null || quit "Remote $opt_branch missing; cannot set as default."
+        _log1 "Setting GitHub default back to $opt_branch"
+        run gh repo edit --default-branch "$opt_branch"
+        default=$(gh_default_branch)
+        [ "$default" = "$opt_branch" ] || quit "Failed to set default branch to $opt_branch (got: $default)."
+        _log1 "  default is now: $default"
+    }
+
+    function delete_remote_tmp() {
+        if ! git rev-parse --verify "origin/$opt_tmp_branch" &>/dev/null; then
+            echo "  Remote '$opt_tmp_branch' already gone; skipping."
+            _log1 "  (resume) remote tmp branch already deleted"
+            return 0
+        fi
+        _log1 "Deleting remote branch $opt_tmp_branch"
+        run git push origin --delete "$opt_tmp_branch"
+        ! git rev-parse --verify "origin/$opt_tmp_branch" &>/dev/null || quit "Remote $opt_tmp_branch still exists after delete."
+    }
+
+    function main() {
+        _log1 "Starting (LOGLEVEL=$LOGLEVEL)"
+        check_prereqs
+        _log1 "Fetching origin..."
+        git fetch origin 2>/dev/null || true
+        detect_branch
+        [ -n "$opt_tmp_branch" ] || quit "Tmp branch name is empty."
+        [ "$opt_branch" != "$opt_tmp_branch" ] || quit "Branch and tmp-branch must differ."
+
+        echo "Using branch='$opt_branch' tmp-branch='$opt_tmp_branch'"
+        _log1 "Steps: 1=push tmp, 2=set default to tmp, 3=delete remote old, 4=rename back&push, 5=restore default, 6=delete remote tmp"
+        echo "[1/6] Rename local branch to $opt_tmp_branch and push"
+        push_tmp_branch
+        echo "[2/6] Set GitHub default branch to $opt_tmp_branch"
+        set_default_to_tmp
+        echo "[3/6] Delete remote $opt_branch"
+        delete_remote_old
+        echo "[4/6] Rename local back to $opt_branch and push"
+        rename_back_and_push
+        echo "[5/6] Restore GitHub default branch to $opt_branch"
+        restore_default
+        echo "[6/6] Delete remote $opt_tmp_branch"
+        delete_remote_tmp
+        echo "Done. Contributors list should refresh on GitHub shortly."
+    }
+
+    function run() {
+        echo "  $*"
+        "$@"
+    }
+
+    boot "$@"

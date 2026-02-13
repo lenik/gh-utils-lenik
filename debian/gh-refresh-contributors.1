@@ -1,0 +1,51 @@
+.\" Copyright (C) 2026 Lenik <gh-refresh-contributors@bodz.net>
+.\" License: GPL-2.0-or-later
+.TH GH-REFRESH-CONTRIBUTORS 1 "2026-02-13" "gh-refresh-contributors 1.0" "User Commands"
+.SH NAME
+gh-refresh-contributors \- force GitHub to refresh the repository contributors list
+.SH SYNOPSIS
+.B gh-refresh-contributors
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B gh-refresh-contributors
+temporarily renames the repository default branch (e.g. \fImain\fR or \fImaster\fR)
+to a temporary name and renames it back. This triggers GitHub to refresh the
+repository contributors list shown on the web interface.
+.PP
+Run from the root of a git repository whose \fIorigin\fR remote points to the
+GitHub repository. Requires the GitHub CLI (\fBgh\fR(1)) to be installed and
+authenticated (\fBgh auth login\fR).
+.PP
+The temporary branch must exist on the remote before GitHub can set it as
+default, so the script pushes the temporary branch first, then sets it as
+default. At the end the remote temporary branch is deleted. The script checks
+the current state before each step and can resume if interrupted (e.g.
+default branch already set to the temporary name).
+.SH OPTIONS
+.TP
+\fB\-b\fR, \fB\-\-branch\fR \fINAME\fR
+Branch to use as the default branch. If omitted, auto-detected from the
+remote (prefers \fIorigin/main\fR, then \fIorigin/master\fR).
+.TP
+\fB\-t\fR, \fB\-\-tmp-branch\fR \fINAME\fR
+Temporary branch name used during the refresh. Default:
+\fItemp-refresh-branch\fR.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Enable verbose logging to stderr.
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Reduce verbosity. Repeat to reduce further.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print usage and exit.
+.SH EXIT STATUS
+0 on success; non-zero on error (invalid options, not a git repo, \fBgh\fR
+not authenticated, or failure during branch rename/push).
+.SH SEE ALSO
+.BR gh (1),
+.BR git (1)
+.SH AUTHOR
+Lenik <gh-refresh-contributors@bodz.net>
+.SH LICENSE
+GPL-2.0-or-later
