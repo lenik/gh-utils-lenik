@@ -1,9 +1,9 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: gh-refresh-contributors
-Source: https://github.com/lenik/gh-refresh-contributors
+Upstream-Name: gh-utils-lenik
+Source: https://github.com/lenik/gh-utils-lenik
 
 Files: *
-Copyright: 2026 Lenik <gh-refresh-contributors@bodz.net>
+Copyright: 2026 Lenik <gh-utils-lenik@bodz.net>
 License: GPL-2.0-or-later
 
 License: GPL-2.0-or-later

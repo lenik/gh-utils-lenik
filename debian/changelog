@@ -1,4 +1,4 @@
-gh-refresh-contributors (1.0.0) unstable; urgency=medium
+gh-utils-lenik (1.0.0) unstable; urgency=medium
 
   * Initial release.
   * Force GitHub to refresh contributors by temporary default-branch rename.

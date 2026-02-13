@@ -1,12 +1,12 @@
-Source: gh-refresh-contributors
+Source: gh-utils-lenik
 Section: devel
 Priority: optional
-Maintainer: Lenik <gh-refresh-contributors@bodz.net>
+Maintainer: Lenik <gh-utils-lenik@bodz.net>
 Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 
-Package: gh-refresh-contributors
+Package: gh-utils-lenik
 Architecture: all
 Depends: git (>= 1:2), gh, ${misc:Depends}
 Description: Force GitHub to refresh the contributors list

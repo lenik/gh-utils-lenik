@@ -1,8 +1,8 @@
-# gh-refresh-contributors
+# gh-utils-lenik
 
 Force GitHub to refresh the repository contributors list by temporarily renaming the default branch and renaming it back.
 
-**Author:** Lenik <gh-refresh-contributors@bodz.net>  
+**Author:** Lenik <gh-utils-lenik@bodz.net>  
 **Copyright:** 2026  
 **License:** GPL-2.0-or-later
 
@@ -47,7 +47,7 @@ Optional: install man page and bash completion with `make install` (or copy from
 
 ```bash
 dpkg-buildpackage -us -uc -b
-sudo dpkg -i ../gh-refresh-contributors_1.0-1_all.deb
+sudo dpkg -i ../gh-utils-lenik_1.0-1_all.deb
 ```
 
 ## Create the GitHub repository
@@ -61,14 +61,14 @@ make create-gh-repo
 Or manually:
 
 ```bash
-gh repo create gh-refresh-contributors --public --source=. --remote=origin --push
+gh repo create gh-utils-lenik --public --source=. --remote=origin --push
 ```
 
 If the repo already exists elsewhere, clone and add the GitHub remote:
 
 ```bash
-gh repo create gh-refresh-contributors --public --clone
-cd gh-refresh-contributors
+gh repo create gh-utils-lenik --public --clone
+cd gh-utils-lenik
 git remote add upstream <your-existing-repo-url>
 git push -u origin main
 ```

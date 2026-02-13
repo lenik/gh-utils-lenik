@@ -1,5 +1,5 @@
 # bash completion for gh-refresh-contributors
-# Author: Lenik <gh-refresh-contributors@bodz.net>
+# Author: Lenik <gh-utils-lenik@bodz.net>
 # License: GPL-2.0-or-later
 
 _gh_refresh_contributors() {
