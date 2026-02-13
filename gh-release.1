@@ -8,17 +8,20 @@ gh-release \- create a GitHub release from debian/changelog version
 [\fIOPTIONS\fR]
 .SH DESCRIPTION
 .B gh-release
-reads the version from the first entry in \fIdebian/changelog\fR, builds a
-source tarball from the current git tree, creates or updates a tag
-\fIvVERSION\fR, and creates a GitHub release with the tarball attached.
-Release notes are generated from the changelog entry.
+reads the version from the first entry in \fIdebian/changelog\fR, runs
+\fBdebuild\fR(1) (or \fBdpkg-buildpackage\fR(1)) to build the \fI.deb\fR package,
+builds a source tarball from the current git tree, creates or updates a tag
+\fIvVERSION\fR, and creates a GitHub release with the tarball and \fI.deb\fR
+attached. Release notes are generated from the changelog entry.
 .PP
 Run from the root of a git repository that has \fIdebian/changelog\fR and
-whose \fIorigin\fR remote points to the GitHub repository. Requires the
-GitHub CLI (\fBgh\fR(1)) to be installed and authenticated (\fBgh auth login\fR).
+whose \fIorigin\fR remote points to the GitHub repository. Requires
+\fBdebuild\fR or \fBdpkg-buildpackage\fR, and the GitHub CLI (\fBgh\fR(1))
+installed and authenticated (\fBgh auth login\fR).
 .PP
 The tarball and tag names use the repository directory name as the package
-name (e.g. \fIgh-utils-lenik-1.0.0.tar.gz\fR, tag \fIv1.0.0\fR).
+name (e.g. \fIgh-utils-lenik-1.0.0.tar.gz\fR, tag \fIv1.0.0\fR). The \fI.deb\fR
+is built in the parent directory and attached to the release.
 .SH OPTIONS
 .TP
 \fB\-f\fR, \fB\-\-force\fR
@@ -34,8 +37,10 @@ Reduce verbosity.
 Print usage and exit.
 .SH EXIT STATUS
 0 on success; non-zero on error (invalid options, not a git repo, missing
-debian/changelog, \fBgh\fR not authenticated, or release creation failure).
+debian/changelog, build failure, \fBgh\fR not authenticated, or release
+creation failure).
 .SH SEE ALSO
+.BR debuild (1),
 .BR gh (1),
 .BR git (1),
 .BR debian/changelog (5)

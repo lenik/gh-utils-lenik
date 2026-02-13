@@ -8,7 +8,7 @@ Rules-Requires-Root: no
 
 Package: gh-utils-lenik
 Architecture: all
-Depends: git (>= 1:2), gh, ${misc:Depends}
+Depends: git (>= 1:2), gh, bash-shlib, ${misc:Depends}
 Description: GitHub CLI helper tools
  This package provides:
  .

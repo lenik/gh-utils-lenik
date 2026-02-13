@@ -39,6 +39,8 @@
         _log1 "  inside git repo"
         [ -f debian/changelog ] || quit "debian/changelog not found."
         _log1 "  debian/changelog present"
+        command -v debuild &>/dev/null || command -v dpkg-buildpackage &>/dev/null || quit "debuild or dpkg-buildpackage not found."
+        _log1 "  debuild/dpkg-buildpackage available"
         command -v gh &>/dev/null || quit "gh CLI not found."
         gh auth status -h github.com &>/dev/null || quit "gh not authenticated."
         _log1 "  gh authenticated"
@@ -76,6 +78,21 @@
             git tag -d "$tag" 2>/dev/null || true
         fi
 
+        _log1 "Building .deb package"
+        if command -v debuild &>/dev/null; then
+            run debuild -b -us -uc
+        else
+            run dpkg-buildpackage -b -us -uc
+        fi
+        local debdir
+        debdir=$(dirname "$root")
+        local debs=()
+        local f
+        for f in "$debdir"/${pkg}_${version}_*.deb; do
+            [ -f "$f" ] && debs+=( "$f" )
+        done
+        [ ${#debs[@]} -gt 0 ] || quit "No .deb produced (expected ${pkg}_${version}_*.deb in $debdir)."
+
         _log1 "Creating tarball $tarball"
         run git archive --format=tar.gz --prefix="${pkg}-${version}/" -o "$tarball" HEAD
 
@@ -93,11 +110,13 @@
         notes=$(mktemp)
         trap 'rm -f "$notes"' EXIT
         printf '%s\n\n' "Release ${version}" > "$notes"
-        awk '/^  \* / { sub(/^  \* /, "- "); print } /^  -- / { exit }' debian/changelog >> "$notes"
+        if ! dpkg-parsechangelog -l debian/changelog -S Changes 2>/dev/null | awk '/^  \* / { sub(/^  \* /, "- "); print }' >> "$notes"; then
+            awk '/^  \* / { sub(/^  \* /, "- "); print } /^  -- / { exit }' debian/changelog >> "$notes"
+        fi
         printf '\nSee README.md and debian/changelog.\n' >> "$notes"
 
         _log1 "Creating GitHub release $tag"
-        run gh release create "$tag" "$tarball" --title "$tag" --notes-file "$notes"
+        run gh release create "$tag" "$tarball" "${debs[@]}" --title "$tag" --notes-file "$notes"
 
         echo "Created release $tag"
     }

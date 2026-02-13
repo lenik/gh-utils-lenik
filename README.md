@@ -32,7 +32,7 @@ gh-refresh-contributors [OPTIONS]
 
 ### gh-release
 
-Create a GitHub release from the version in `debian/changelog`: build a source tarball, create tag `vVERSION`, and create the release with notes from the changelog.
+Create a GitHub release from the version in `debian/changelog`: run `debuild` to build the `.deb` package, build a source tarball, create tag `vVERSION`, and create the release with the tarball, `.deb`, and notes from the changelog.
 
 ```bash
 gh-release [OPTIONS]

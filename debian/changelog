@@ -1,3 +1,10 @@
+gh-utils-lenik (1.2.0) unstable; urgency=medium
+
+  * gh-release: use only latest revision changelog for release notes.
+  * gh-release: run debuild and attach .deb package to the release.
+
+ -- Lenik (谢继雷) <lenik@bodz.net>  Fri, 13 Feb 2026 12:00:00 +0000
+
 gh-utils-lenik (1.1.0) unstable; urgency=medium
 
   * Package renamed to gh-utils-lenik; provides multiple tools.
