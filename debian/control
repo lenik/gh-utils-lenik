@@ -9,10 +9,15 @@ Rules-Requires-Root: no
 Package: gh-utils-lenik
 Architecture: all
 Depends: git (>= 1:2), gh, ${misc:Depends}
-Description: Force GitHub to refresh the contributors list
- gh-refresh-contributors temporarily renames the repository default branch
- (e.g. main or master) to a temporary name and renames it back, which triggers
- GitHub to refresh the repository contributors list on the web interface.
+Description: GitHub CLI helper tools
+ This package provides:
+ .
+  * gh-refresh-contributors: temporarily renames the repository default branch
+    (e.g. main or master) to a temporary name and renames it back, which
+    triggers GitHub to refresh the repository contributors list on the web
+    interface.
+  * gh-release: creates a GitHub release from the version in debian/changelog,
+    including a source tarball and release notes from the changelog.
  .
  Requires a GitHub CLI (gh) authenticated session and a git repo with
  remote "origin" pointing to the GitHub repository.

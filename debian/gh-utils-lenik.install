@@ -1,0 +1,6 @@
+gh-refresh-contributors usr/bin
+gh-refresh-contributors.1 usr/share/man/man1
+gh-release usr/bin
+gh-release.1 usr/share/man/man1
+bash-completion/gh-refresh-contributors usr/share/bash-completion/completions
+bash-completion/gh-release usr/share/bash-completion/completions

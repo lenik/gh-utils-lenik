@@ -1,0 +1,17 @@
+# bash completion for gh-release
+# Author: Lenik <gh-utils-lenik@bodz.net>
+# License: GPL-2.0-or-later
+
+_gh_release() {
+    local cur
+    _init_completion -s || return
+
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=($(compgen -W '-f --force -v --verbose -q --quiet -h --help' -- "$cur"))
+        return
+    fi
+
+    return
+}
+
+complete -F _gh_release gh-release

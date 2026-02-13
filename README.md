@@ -1,6 +1,6 @@
 # gh-utils-lenik
 
-Force GitHub to refresh the repository contributors list by temporarily renaming the default branch and renaming it back.
+GitHub CLI helper tools: refresh repository contributors list and create releases from `debian/changelog`.
 
 **Author:** Lenik <gh-utils-lenik@bodz.net>  
 **Copyright:** 2026  
@@ -12,15 +12,15 @@ Force GitHub to refresh the repository contributors list by temporarily renaming
 - [GitHub CLI](https://cli.github.com/) (`gh`), authenticated (`gh auth login`)
 - Repository with remote `origin` pointing to the GitHub repo
 
-## Usage
+## Tools
 
-Run from the root of your git repository:
+### gh-refresh-contributors
+
+Force GitHub to refresh the repository contributors list by temporarily renaming the default branch and renaming it back.
 
 ```bash
 gh-refresh-contributors [OPTIONS]
 ```
-
-### Options
 
 | Option | Description |
 |--------|-------------|
@@ -30,50 +30,46 @@ gh-refresh-contributors [OPTIONS]
 | `-q`, `--quiet` | Less output |
 | `-h`, `--help` | Show help |
 
+### gh-release
+
+Create a GitHub release from the version in `debian/changelog`: build a source tarball, create tag `vVERSION`, and create the release with notes from the changelog.
+
+```bash
+gh-release [OPTIONS]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-f`, `--force` | Replace existing release and tag if present |
+| `-v`, `--verbose` | Verbose logging |
+| `-q`, `--quiet` | Less output |
+| `-h`, `--help` | Show help |
+
+Run from the repo root; requires `debian/changelog`.
+
 ## Install
 
 ### From source
 
-Copy the script into your `PATH`:
+Copy the scripts into your `PATH`:
 
 ```bash
-cp gh-refresh-contributors /usr/local/bin/
-chmod +x /usr/local/bin/gh-refresh-contributors
+cp gh-refresh-contributors gh-release /usr/local/bin/
+chmod +x /usr/local/bin/gh-refresh-contributors /usr/local/bin/gh-release
 ```
 
-Optional: install man page and bash completion with `make install` (or copy from `debian/gh-refresh-contributors.1` and `bash-completion/gh-refresh-contributors`).
+Optional: install man pages and bash completions from `debian/*.1` and `bash-completion/`.
 
 ### Debian package
 
 ```bash
 dpkg-buildpackage -us -uc -b
-sudo dpkg -i ../gh-utils-lenik_1.0-1_all.deb
+sudo dpkg -i ../gh-utils-lenik_*.deb
 ```
 
-## Create the GitHub repository
-
-To create the GitHub repo for this project (one-time):
-
-```bash
-make create-gh-repo
 ```
 
-Or manually:
-
-```bash
-gh repo create gh-utils-lenik --public --source=. --remote=origin --push
-```
-
-If the repo already exists elsewhere, clone and add the GitHub remote:
-
-```bash
-gh repo create gh-utils-lenik --public --clone
-cd gh-utils-lenik
-git remote add upstream <your-existing-repo-url>
-git push -u origin main
-```
-
-## How it works
+## How gh-refresh-contributors works
 
 1. Rename the local branch to the temporary name and push (so the temp branch exists on the remote).
 2. Set GitHub default branch to the temporary name.

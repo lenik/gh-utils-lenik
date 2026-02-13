@@ -1,0 +1,105 @@
+#!/bin/bash
+    : ${RCSID:=$Id: gh-release 1.0 2026-02-13 - $}
+    : ${PROGRAM_TITLE:="Create a GitHub release from debian/changelog version"}
+    : ${PROGRAM_SYNTAX:="[OPTIONS]"}
+
+    . shlib-import cliboot
+
+    option -f --force   "Replace existing release and tag if present"
+    option -v --verbose "Verbose logging"
+    option -q --quiet
+    option -h --help
+
+    opt_force=
+
+    function setopt() {
+        case "$1" in
+            -f|--force)
+                opt_force=1;;
+            -q|--quiet)
+                (( LOGLEVEL-- ));;
+            -v|--verbose)
+                (( LOGLEVEL++ ));;
+            -h|--help)
+                help $1; exit;;
+            *)
+                quit "invalid option: $1";;
+        esac
+    }
+
+    # ---- Helpers ----
+    function run() {
+        echo "  $*"
+        "$@"
+    }
+
+    function check_prereqs() {
+        _log1 "Checking prerequisites..."
+        git rev-parse --is-inside-work-tree &>/dev/null || quit "Not inside a git repository."
+        _log1 "  inside git repo"
+        [ -f debian/changelog ] || quit "debian/changelog not found."
+        _log1 "  debian/changelog present"
+        command -v gh &>/dev/null || quit "gh CLI not found."
+        gh auth status -h github.com &>/dev/null || quit "gh not authenticated."
+        _log1 "  gh authenticated"
+    }
+
+    function main() {
+        _log1 "Starting (LOGLEVEL=$LOGLEVEL)"
+        check_prereqs
+
+        local root
+        root=$(git rev-parse --show-toplevel)
+        cd "$root"
+
+        local version pkg tarball tag
+        version=$(awk -F'[()]' '{print $2; exit}' debian/changelog)
+        [ -n "$version" ] || quit "Could not parse version from debian/changelog."
+        pkg=$(basename "$root")
+        tarball="${pkg}-${version}.tar.gz"
+        tag="v${version}"
+        _log1 "Version: $version  Package: $pkg  Tag: $tag"
+
+        if [[ -z $opt_force ]]; then
+            if git rev-parse "$tag" &>/dev/null; then
+                quit "Tag $tag already exists locally. Use -f to replace."
+            fi
+            if git ls-remote origin "refs/tags/$tag" 2>/dev/null | grep -q .; then
+                quit "Tag $tag already exists on origin. Use -f to replace."
+            fi
+            if gh release view "$tag" &>/dev/null; then
+                quit "Release $tag already exists. Use -f to replace."
+            fi
+        else
+            _log1 "Force: deleting existing release and tag if present"
+            gh release delete "$tag" --cleanup-tag -y 2>/dev/null || true
+            git tag -d "$tag" 2>/dev/null || true
+        fi
+
+        _log1 "Creating tarball $tarball"
+        run git archive --format=tar.gz --prefix="${pkg}-${version}/" -o "$tarball" HEAD
+
+        if ! git rev-parse "$tag" &>/dev/null; then
+            _log1 "Creating tag $tag"
+            run git tag "$tag"
+        fi
+        if [[ -n $opt_force ]]; then
+            run git push -f origin "$tag"
+        else
+            run git push origin "$tag"
+        fi
+
+        local notes
+        notes=$(mktemp)
+        trap 'rm -f "$notes"' EXIT
+        printf '%s\n\n' "Release ${version}" > "$notes"
+        awk '/^  \* / { sub(/^  \* /, "- "); print } /^  -- / { exit }' debian/changelog >> "$notes"
+        printf '\nSee README.md and debian/changelog.\n' >> "$notes"
+
+        _log1 "Creating GitHub release $tag"
+        run gh release create "$tag" "$tarball" --title "$tag" --notes-file "$notes"
+
+        echo "Created release $tag"
+    }
+
+    boot "$@"

@@ -2,7 +2,9 @@
 debian/files
 debian/.debhelper/
 debian/debhelper-*
-debian/gh-refresh-contributors*
+debian/*.substvars
+debian/gh-utils-lenik
+debian/gh-refresh-contributors
 *.deb
 *.buildinfo
 *.changes

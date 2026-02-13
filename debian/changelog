@@ -1,3 +1,12 @@
+gh-utils-lenik (1.1.0) unstable; urgency=medium
+
+  * Package renamed to gh-utils-lenik; provides multiple tools.
+  * Add gh-release: create GitHub releases from debian/changelog version.
+  * gh-refresh-contributors: force GitHub to refresh contributors by
+    temporary default-branch rename (unchanged behavior).
+
+ -- Lenik (谢继雷) <lenik@bodz.net>  Fri, 13 Feb 2026 12:00:00 +0000
+
 gh-utils-lenik (1.0.0) unstable; urgency=medium
 
   * Initial release.

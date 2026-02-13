@@ -1,0 +1,45 @@
+.\" Copyright (C) 2026 Lenik <gh-utils-lenik@bodz.net>
+.\" License: GPL-2.0-or-later
+.TH GH-RELEASE 1 "2026-02-13" "gh-release 1.0" "User Commands"
+.SH NAME
+gh-release \- create a GitHub release from debian/changelog version
+.SH SYNOPSIS
+.B gh-release
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B gh-release
+reads the version from the first entry in \fIdebian/changelog\fR, builds a
+source tarball from the current git tree, creates or updates a tag
+\fIvVERSION\fR, and creates a GitHub release with the tarball attached.
+Release notes are generated from the changelog entry.
+.PP
+Run from the root of a git repository that has \fIdebian/changelog\fR and
+whose \fIorigin\fR remote points to the GitHub repository. Requires the
+GitHub CLI (\fBgh\fR(1)) to be installed and authenticated (\fBgh auth login\fR).
+.PP
+The tarball and tag names use the repository directory name as the package
+name (e.g. \fIgh-utils-lenik-1.0.0.tar.gz\fR, tag \fIv1.0.0\fR).
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+If the release or tag already exists, delete it and recreate. Use with care.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Enable verbose logging to stderr.
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Reduce verbosity.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print usage and exit.
+.SH EXIT STATUS
+0 on success; non-zero on error (invalid options, not a git repo, missing
+debian/changelog, \fBgh\fR not authenticated, or release creation failure).
+.SH SEE ALSO
+.BR gh (1),
+.BR git (1),
+.BR debian/changelog (5)
+.SH AUTHOR
+Lenik <gh-utils-lenik@bodz.net>
+.SH LICENSE
+GPL-2.0-or-later
