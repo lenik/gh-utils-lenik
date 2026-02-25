@@ -1,7 +1,13 @@
+gh-utils-lenik (1.3.0) unstable; urgency=medium
+
+  * Renamed gh-release to gh-makerelease
+
+ -- Lenik (谢继雷) <lenik@bodz.net>  Wed, 25 Feb 2026 12:00:00 +0000
+
 gh-utils-lenik (1.1.0) unstable; urgency=medium
 
   * Package renamed to gh-utils-lenik; provides multiple tools.
-  * Add gh-release: create GitHub releases from debian/changelog version.
+  * Add gh-makerelease: create GitHub releases from debian/changelog version.
   * gh-refresh-contributors: force GitHub to refresh contributors by
     temporary default-branch rename (unchanged behavior).
 
