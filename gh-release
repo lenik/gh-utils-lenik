@@ -34,10 +34,11 @@
     }
 
     function check_prereqs() {
+        local root
+        root=$(git rev-parse --show-toplevel) || quit "Not inside a git repository."
         _log1 "Checking prerequisites..."
-        git rev-parse --is-inside-work-tree &>/dev/null || quit "Not inside a git repository."
         _log1 "  inside git repo"
-        [ -f debian/changelog ] || quit "debian/changelog not found."
+        [ -f "$root/debian/changelog" ] || quit "debian/changelog not found."
         _log1 "  debian/changelog present"
         command -v debuild &>/dev/null || command -v dpkg-buildpackage &>/dev/null || quit "debuild or dpkg-buildpackage not found."
         _log1 "  debuild/dpkg-buildpackage available"
@@ -52,10 +53,11 @@
 
         local root
         root=$(git rev-parse --show-toplevel)
-        cd "$root"
+        cd "$root" || quit "Could not cd to repo root $root."
 
+        local changelog="$root/debian/changelog"
         local version pkg tarball tag
-        version=$(awk -F'[()]' '{print $2; exit}' debian/changelog)
+        version=$(awk -F'[()]' '{print $2; exit}' "$changelog")
         [ -n "$version" ] || quit "Could not parse version from debian/changelog."
         pkg=$(basename "$root")
         tarball="${pkg}-${version}.tar.gz"
@@ -110,8 +112,8 @@
         notes=$(mktemp)
         trap 'rm -f "$notes"' EXIT
         printf '%s\n\n' "Release ${version}" > "$notes"
-        if ! dpkg-parsechangelog -l debian/changelog -S Changes 2>/dev/null | awk '/^  \* / { sub(/^  \* /, "- "); print }' >> "$notes"; then
-            awk '/^  \* / { sub(/^  \* /, "- "); print } /^  -- / { exit }' debian/changelog >> "$notes"
+        if ! dpkg-parsechangelog -l "$changelog" -S Changes 2>/dev/null | awk '/^  \* / { sub(/^  \* /, "- "); print }' >> "$notes"; then
+            awk '/^  \* / { sub(/^  \* /, "- "); print } /^  -- / { exit }' "$changelog" >> "$notes"
         fi
         printf '\nSee README.md and debian/changelog.\n' >> "$notes"
 
