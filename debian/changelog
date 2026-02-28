@@ -1,3 +1,13 @@
+gh-utils-lenik (1.4.0) unstable; urgency=medium
+
+  * auto-detect project type (debian/vsix/nodejs)
+  * support VSIX extensions and Node.js packages
+  * determine version from changelog or package.json
+  * build with debuild or pnpm package based on type
+  * attach appropriate artifacts (.deb, .vsix, -dist.zip)
+
+ -- Lenik (谢继雷) <lenik@bodz.net>  Sat, 01 Mar 2026 12:00:00 +0000
+
 gh-utils-lenik (1.3.0) unstable; urgency=medium
 
   * Renamed gh-release to gh-makerelease

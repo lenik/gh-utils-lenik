@@ -1,6 +1,6 @@
 #!/bin/bash
-    : ${RCSID:=$Id: gh-makerelease 1.0 2026-02-13 - $}
-    : ${PROGRAM_TITLE:="Create a GitHub release from debian/changelog version"}
+    : ${RCSID:=$Id: gh-makerelease 1.1 2026-03-01 - $}
+    : ${PROGRAM_TITLE:="Create a GitHub release with auto-detected project type"}
     : ${PROGRAM_SYNTAX:="[OPTIONS]"}
 
     . shlib-import cliboot
@@ -12,115 +12,289 @@
 
     opt_force=
 
-    function setopt() {
-        case "$1" in
-            -f|--force)
-                opt_force=1;;
-            -q|--quiet)
-                (( LOGLEVEL-- ));;
-            -v|--verbose)
-                (( LOGLEVEL++ ));;
-            -h|--help)
-                help $1; exit;;
-            *)
-                quit "invalid option: $1";;
-        esac
-    }
+function setopt() {
+    case "$1" in
+        -f|--force)
+            opt_force=1;;
+        -q|--quiet)
+            (( LOGLEVEL-- ));;
+        -v|--verbose)
+            (( LOGLEVEL++ ));;
+        -h|--help)
+            help $1; exit;;
+        *)
+            quit "invalid option: $1";;
+    esac
+}
 
-    # ---- Helpers ----
-    function run() {
-        echo "  $*"
-        "$@"
-    }
+# ---- Helpers ----
+function run() {
+    echo "  $*"
+    "$@"
+}
 
-    function check_prereqs() {
-        local root
-        root=$(git rev-parse --show-toplevel) || quit "Not inside a git repository."
-        _log1 "Checking prerequisites..."
-        _log1 "  inside git repo"
-        [ -f "$root/debian/changelog" ] || quit "debian/changelog not found."
-        _log1 "  debian/changelog present"
-        command -v debuild &>/dev/null || command -v dpkg-buildpackage &>/dev/null || quit "debuild or dpkg-buildpackage not found."
-        _log1 "  debuild/dpkg-buildpackage available"
-        command -v gh &>/dev/null || quit "gh CLI not found."
-        gh auth status -h github.com &>/dev/null || quit "gh not authenticated."
-        _log1 "  gh authenticated"
-    }
+# Detect project type: debian, vsix, or nodejs
+function detect_project_type() {
+    local root="$1"
+    
+    # debian: exists debian/control
+    if [ -f "$root/debian/control" ]; then
+        echo "debian"
+        return 0
+    fi
+    
+    # vsix: jq .scripts.package package.json contains `vsce package`
+    if [ -f "$root/package.json" ]; then
+        local package_script
+        package_script=$(jq -r '.scripts.package // ""' "$root/package.json" 2>/dev/null)
+        if [[ "$package_script" == *"vsce package"* ]]; then
+            echo "vsix"
+            return 0
+        fi
+    fi
+    
+    # nodejs: exists package.json
+    if [ -f "$root/package.json" ]; then
+        echo "nodejs"
+        return 0
+    fi
+    
+    return 1
+}
 
-    function main() {
-        _log1 "Starting (LOGLEVEL=$LOGLEVEL)"
-        check_prereqs
+# Get version by project type
+function get_version() {
+    local type="$1"
+    local root="$2"
+    
+    case "$type" in
+        debian)
+            local changelog="$root/debian/changelog"
+            [ -f "$changelog" ] || quit "debian/changelog not found."
+            awk -F'[()]' '{print $2; exit}' "$changelog"
+            ;;
+        vsix|nodejs)
+            local pkg_json="$root/package.json"
+            [ -f "$pkg_json" ] || quit "package.json not found."
+            jq -r '.version // empty' "$pkg_json"
+            ;;
+    esac
+}
 
-        local root
-        root=$(git rev-parse --show-toplevel)
-        cd "$root" || quit "Could not cd to repo root $root."
-
-        local changelog="$root/debian/changelog"
-        local version pkg tarball tag
-        version=$(awk -F'[()]' '{print $2; exit}' "$changelog")
-        [ -n "$version" ] || quit "Could not parse version from debian/changelog."
-        pkg=$(basename "$root")
-        tarball="${pkg}-${version}.tar.gz"
-        tag="v${version}"
-        _log1 "Version: $version  Package: $pkg  Tag: $tag"
-
-        if [[ -z $opt_force ]]; then
-            if git rev-parse "$tag" &>/dev/null; then
-                quit "Tag $tag already exists locally. Use -f to replace."
+# Get package name
+function get_package_name() {
+    local type="$1"
+    local root="$2"
+    
+    case "$type" in
+        debian)
+            local control="$root/debian/control"
+            local pkg
+            if [ -f "$control" ]; then
+                pkg=$(awk -F': ' '/^Source:/ {print $2; exit}' "$control")
             fi
-            if git ls-remote origin "refs/tags/$tag" 2>/dev/null | grep -q .; then
-                quit "Tag $tag already exists on origin. Use -f to replace."
+            if [ -z "$pkg" ]; then
+                basename "$root"
+            else
+                echo "$pkg"
             fi
-            if gh release view "$tag" &>/dev/null; then
-                quit "Release $tag already exists. Use -f to replace."
+            ;;
+        vsix|nodejs)
+            jq -r '.name // empty' "$root/package.json"
+            ;;
+    esac
+}
+
+# Build project by type
+function build_project() {
+    local type="$1"
+    local root="$2"
+    local version="$3"
+    local pkg="$4"
+    
+    case "$type" in
+        debian)
+            _log1 "Building debian package"
+            if command -v debuild &>/dev/null; then
+                run debuild -b -us -uc
+            else
+                run dpkg-buildpackage -b -us -uc
             fi
-        else
-            _log1 "Force: deleting existing release and tag if present"
-            gh release delete "$tag" --cleanup-tag -y 2>/dev/null || true
-            git tag -d "$tag" 2>/dev/null || true
+            ;;
+        vsix)
+            _log1 "Building vsix package"
+            run pnpm package
+            ;;
+        nodejs)
+            _log1 "Building nodejs package"
+            run pnpm package
+            ;;
+    esac
+}
+
+# Find release attachments by type
+function find_attachments() {
+    local type="$1"
+    local root="$2"
+    local version="$3"
+    local pkg="$4"
+    
+    case "$type" in
+        debian)
+            local debdir
+            debdir=$(dirname "$root")
+            local f
+            for f in "$debdir"/${pkg}_${version}_*.deb; do
+                [ -f "$f" ] && echo "$f"
+            done
+            ;;
+        vsix)
+            local f
+            for f in "$root"/${pkg}-${version}.vsix; do
+                [ -f "$f" ] && echo "$f"
+            done
+            ;;
+        nodejs)
+            local f
+            for f in "$root"/${pkg}-${version}-dist.zip; do
+                [ -f "$f" ] && echo "$f"
+            done
+            ;;
+    esac
+}
+
+# Get release notes
+function get_release_notes() {
+    local type="$1"
+    local root="$2"
+    local version="$3"
+    local pkg="$4"
+    
+    local notes
+    notes=$(mktemp)
+    
+    case "$type" in
+        debian)
+            local changelog="$root/debian/changelog"
+            printf '%s\n\n' "Release ${version}" > "$notes"
+            if dpkg-parsechangelog -l "$changelog" -S Changes 2>/dev/null | awk '/^  \* / { sub(/^  \* /, "- "); print }' >> "$notes"; then
+                :
+            else
+                awk '/^  \* / { sub(/^  \* /, "- "); print } /^  -- / { exit }' "$changelog" >> "$notes"
+            fi
+            printf '\nSee README.md and debian/changelog.\n' >> "$notes"
+            ;;
+        vsix|nodejs)
+            _log1 "Getting release notes from recent commit"
+            printf '%s\n\n' "Release ${version}" > "$notes"
+            git log -1 --format=%B >> "$notes"
+            printf '\n' >> "$notes"
+            ;;
+    esac
+    
+    echo "$notes"
+}
+
+function check_prereqs() {
+    local root
+    root=$(git rev-parse --show-toplevel) || quit "Not inside a git repository."
+    _log1 "Checking prerequisites..."
+    _log1 "  inside git repo"
+    
+    local ptype
+    ptype=$(detect_project_type "$root")
+    [ -n "$ptype" ] || quit "Could not detect project type (debian/vsix/nodejs)."
+    _log1 "  project type: $ptype"
+    
+    case "$ptype" in
+        debian)
+            command -v debuild &>/dev/null || command -v dpkg-buildpackage &>/dev/null || quit "debuild or dpkg-buildpackage not found."
+            _log1 "  debuild/dpkg-buildpackage available"
+            ;;
+        vsix|nodejs)
+            command -v pnpm &>/dev/null || quit "pnpm not found."
+            _log1 "  pnpm available"
+            ;;
+    esac
+    
+    command -v gh &>/dev/null || quit "gh CLI not found."
+    gh auth status -h github.com &>/dev/null || quit "gh not authenticated."
+    _log1 "  gh authenticated"
+    
+    echo "$ptype"
+}
+
+function main() {
+    _log1 "Starting (LOGLEVEL=$LOGLEVEL)"
+    
+    local root
+    root=$(git rev-parse --show-toplevel)
+    cd "$root" || quit "Could not cd to repo root $root."
+
+    local project_type
+    project_type=$(check_prereqs)
+    _log1 "Project type: $project_type"
+
+    local version pkg tag
+    version=$(get_version "$project_type" "$root")
+    [ -n "$version" ] || quit "Could not determine version."
+    pkg=$(get_package_name "$project_type" "$root")
+    [ -n "$pkg" ] || pkg=$(basename "$root")
+    tag="v${version}"
+    _log1 "Version: $version  Package: $pkg  Tag: $tag"
+
+    if [[ -z $opt_force ]]; then
+        if git rev-parse "$tag" &>/dev/null; then
+            quit "Tag $tag already exists locally. Use -f to replace."
         fi
-
-        _log1 "Building .deb package"
-        if command -v debuild &>/dev/null; then
-            run debuild -b -us -uc
-        else
-            run dpkg-buildpackage -b -us -uc
+        if git ls-remote origin "refs/tags/$tag" 2>/dev/null | grep -q .; then
+            quit "Tag $tag already exists on origin. Use -f to replace."
         fi
-        local debdir
-        debdir=$(dirname "$root")
-        local debs=()
-        local f
-        for f in "$debdir"/${pkg}_${version}_*.deb; do
-            [ -f "$f" ] && debs+=( "$f" )
-        done
-        [ ${#debs[@]} -gt 0 ] || quit "No .deb produced (expected ${pkg}_${version}_*.deb in $debdir)."
-
-        _log1 "Creating tarball $tarball"
-        run git archive --format=tar.gz --prefix="${pkg}-${version}/" -o "$tarball" HEAD
-
-        if ! git rev-parse "$tag" &>/dev/null; then
-            _log1 "Creating tag $tag"
-            run git tag "$tag"
+        if gh release view "$tag" &>/dev/null; then
+            quit "Release $tag already exists. Use -f to replace."
         fi
-        if [[ -n $opt_force ]]; then
-            run git push -f origin "$tag"
-        else
-            run git push origin "$tag"
-        fi
+    else
+        _log1 "Force: deleting existing release and tag if present"
+        gh release delete "$tag" --cleanup-tag -y 2>/dev/null || true
+        git tag -d "$tag" 2>/dev/null || true
+    fi
 
-        local notes
-        notes=$(mktemp)
-        trap 'rm -f "$notes"' EXIT
-        printf '%s\n\n' "Release ${version}" > "$notes"
-        if ! dpkg-parsechangelog -l "$changelog" -S Changes 2>/dev/null | awk '/^  \* / { sub(/^  \* /, "- "); print }' >> "$notes"; then
-            awk '/^  \* / { sub(/^  \* /, "- "); print } /^  -- / { exit }' "$changelog" >> "$notes"
-        fi
-        printf '\nSee README.md and debian/changelog.\n' >> "$notes"
+    # Build the project
+    build_project "$project_type" "$root" "$version" "$pkg"
 
-        _log1 "Creating GitHub release $tag"
-        run gh release create "$tag" "$tarball" "${debs[@]}" --title "$tag" --notes-file "$notes"
+    # Find attachments
+    local attachments=()
+    local att
+    while IFS= read -r att; do
+        [ -n "$att" ] && attachments+=( "$att" )
+    done < <(find_attachments "$project_type" "$root" "$version" "$pkg")
+    [ ${#attachments[@]} -gt 0 ] || quit "No build artifacts produced."
+    _log1 "Attachments: ${attachments[*]}"
 
-        echo "Created release $tag"
-    }
+    local tarball
+    _log1 "Creating source tarball preserving original sources"
+    tarball="${pkg}-${version}.tar.gz"
+    run git archive --format=tar.gz --prefix="${pkg}-${version}/" -o "$tarball" HEAD
 
-    boot "$@"
+    if ! git rev-parse "$tag" &>/dev/null; then
+        _log1 "Creating tag $tag"
+        run git tag "$tag"
+    fi
+    if [[ -n $opt_force ]]; then
+        run git push -f origin "$tag"
+    else
+        run git push origin "$tag"
+    fi
+
+    # Get release notes
+    local notes
+    notes=$(get_release_notes "$project_type" "$root" "$version" "$pkg")
+    trap 'rm -f "$notes"' EXIT
+
+    _log1 "Creating GitHub release $tag"
+    run gh release create "$tag" "$tarball" "${attachments[@]}" --title "$tag" --notes-file "$notes"
+
+    echo "Created release $tag"
+}
+
+boot "$@"

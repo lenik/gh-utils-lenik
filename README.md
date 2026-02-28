@@ -32,7 +32,7 @@ gh-refresh-contributors [OPTIONS]
 
 ### gh-makerelease
 
-Create a GitHub release from the version in `debian/changelog`: run `debuild` to build the `.deb` package, build a source tarball, create tag `vVERSION`, and create the release with the tarball, `.deb`, and notes from the changelog.
+Create a GitHub release with auto-detected project type. Detects debian (if `debian/control` exists), vsix (if `package.json` contains `vsce package` script), or nodejs (if `package.json` exists) projects.
 
 ```bash
 gh-makerelease [OPTIONS]
@@ -45,7 +45,20 @@ gh-makerelease [OPTIONS]
 | `-q`, `--quiet` | Less output |
 | `-h`, `--help` | Show help |
 
-Run from the repo root; requires `debian/changelog`.
+**Project type detection:**
+
+| Type | Version Source | Build Command | Release Attachments |
+|------|---------------|---------------|---------------------|
+| debian | `debian/changelog` | `debuild -b -us -uc` | `{pkg}_{version}_*.deb` + source tarball |
+| vsix | `package.json` | `pnpm package` | `{pkg}-{version}.vsix` |
+| nodejs | `package.json` | `pnpm package` | `{pkg}-{version}-dist.zip` |
+
+**Release notes:**
+
+- **debian**: Extracted from `debian/changelog` header
+- **vsix/nodejs**: Git log message from most recent commit
+
+Run from the repo root.
 
 ## Install
 
