@@ -30,12 +30,12 @@ gh-refresh-contributors [OPTIONS]
 | `-q`, `--quiet` | Less output |
 | `-h`, `--help` | Show help |
 
-### gh-release
+### gh-makerelease
 
 Create a GitHub release from the version in `debian/changelog`: run `debuild` to build the `.deb` package, build a source tarball, create tag `vVERSION`, and create the release with the tarball, `.deb`, and notes from the changelog.
 
 ```bash
-gh-release [OPTIONS]
+gh-makerelease [OPTIONS]
 ```
 
 | Option | Description |
@@ -54,8 +54,8 @@ Run from the repo root; requires `debian/changelog`.
 Copy the scripts into your `PATH`:
 
 ```bash
-cp gh-refresh-contributors gh-release /usr/local/bin/
-chmod +x /usr/local/bin/gh-refresh-contributors /usr/local/bin/gh-release
+cp gh-refresh-contributors gh-makerelease /usr/local/bin/
+chmod +x /usr/local/bin/gh-refresh-contributors /usr/local/bin/gh-makerelease
 ```
 
 Optional: install man pages and bash completions from `debian/*.1` and `bash-completion/`.

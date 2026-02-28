@@ -16,7 +16,7 @@ Description: GitHub CLI helper tools
     (e.g. main or master) to a temporary name and renames it back, which
     triggers GitHub to refresh the repository contributors list on the web
     interface.
-  * gh-release: creates a GitHub release from the version in debian/changelog,
+  * gh-makerelease: creates a GitHub release from the version in debian/changelog,
     including a source tarball and release notes from the changelog.
  .
  Requires a GitHub CLI (gh) authenticated session and a git repo with

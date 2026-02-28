@@ -1,5 +1,5 @@
 #!/bin/bash
-    : ${RCSID:=$Id: gh-release 1.0 2026-02-13 - $}
+    : ${RCSID:=$Id: gh-makerelease 1.0 2026-02-13 - $}
     : ${PROGRAM_TITLE:="Create a GitHub release from debian/changelog version"}
     : ${PROGRAM_SYNTAX:="[OPTIONS]"}
 

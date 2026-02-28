@@ -1,13 +1,13 @@
 .\" Copyright (C) 2026 Lenik <gh-utils-lenik@bodz.net>
 .\" License: GPL-2.0-or-later
-.TH GH-RELEASE 1 "2026-02-13" "gh-release 1.0" "User Commands"
+.TH GH-RELEASE 1 "2026-02-13" "gh-makerelease 1.0" "User Commands"
 .SH NAME
-gh-release \- create a GitHub release from debian/changelog version
+gh-makerelease \- create a GitHub release from debian/changelog version
 .SH SYNOPSIS
-.B gh-release
+.B gh-makerelease
 [\fIOPTIONS\fR]
 .SH DESCRIPTION
-.B gh-release
+.B gh-makerelease
 reads the version from the first entry in \fIdebian/changelog\fR, runs
 \fBdebuild\fR(1) (or \fBdpkg-buildpackage\fR(1)) to build the \fI.deb\fR package,
 builds a source tarball from the current git tree, creates or updates a tag

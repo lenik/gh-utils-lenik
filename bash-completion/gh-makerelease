@@ -1,4 +1,4 @@
-# bash completion for gh-release
+# bash completion for gh-makerelease
 # Author: Lenik <gh-utils-lenik@bodz.net>
 # License: GPL-2.0-or-later
 
@@ -14,4 +14,4 @@ _gh_release() {
     return
 }
 
-complete -F _gh_release gh-release
+complete -F _gh_release gh-makerelease
