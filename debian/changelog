@@ -1,3 +1,12 @@
+gh-utils-lenik (1.4.1) unstable; urgency=medium
+
+  * Discover .deb and -dbgsym packages from debian/control.
+  * Auto install .deb files.
+  * Auto dput to bodz with changes file.
+  * Attach all built Debian packages to the release.
+
+ -- Lenik (谢继雷) <lenik@bodz.net>  Sat, 01 Mar 2026 12:30:00 +0000
+
 gh-utils-lenik (1.4.0) unstable; urgency=medium
 
   * auto-detect project type (debian/vsix/nodejs)
