@@ -7,24 +7,28 @@
 
     option -n --no-pre-clean    "Reuse build cache"
     option -u --unsigned        "Build unsigned packages"
+    option -l --local           "Build in local, no tag/push/release"
     option -f --force           "Replace existing release and tag if present"
     option -v --verbose         "Verbose logging"
     option -q --quiet           "Less output"
     option -h --help            "Show help"
 
     opt_force=
-    
+    opt_local=0
+
     # -b: Equivalent to --build=binary or --build=any,all
     # -us: --unsigned-source
     # -uc: --unsigned-changes
-    debuildopts=( -b  )
+    dpkg_buildopts=( -b  )
 
 function setopt() {
     case "$1" in
         -u|--unsigned)
-            debuildopts+=( -us -uc );;
+            dpkg_buildopts+=( -us -uc );;
         -n|--no-pre-clean)
-            debuildopts+=( -nc );;
+            dpkg_buildopts+=( -nc );;
+        -l|--local)
+            opt_local=1;;
         -f|--force)
             opt_force=1;;
         -q|--quiet)
@@ -46,18 +50,18 @@ function run() {
 
 # Detect project type: debian, vsix, or nodejs
 function detect_project_type() {
-    local root="$1"
+    local projectdir="$1"
     
     # debian: exists debian/control
-    if [ -f "$root/debian/control" ]; then
+    if [ -f "$projectdir/debian/control" ]; then
         echo "debian"
         return 0
     fi
     
     # vsix: jq .scripts.package package.json contains `vsce package`
-    if [ -f "$root/package.json" ]; then
+    if [ -f "$projectdir/package.json" ]; then
         local package_script
-        package_script=$(jq -r '.scripts.package // ""' "$root/package.json" 2>/dev/null)
+        package_script=$(jq -r '.scripts.package // ""' "$projectdir/package.json" 2>/dev/null)
         if [[ "$package_script" == *"vsce package"* ]]; then
             echo "vsix"
             return 0
@@ -65,7 +69,7 @@ function detect_project_type() {
     fi
     
     # nodejs: exists package.json
-    if [ -f "$root/package.json" ]; then
+    if [ -f "$projectdir/package.json" ]; then
         echo "nodejs"
         return 0
     fi
@@ -76,16 +80,16 @@ function detect_project_type() {
 # Get version by project type
 function get_version() {
     local type="$1"
-    local root="$2"
+    local projectdir="$2"
     
     case "$type" in
         debian)
-            local changelog="$root/debian/changelog"
+            local changelog="$projectdir/debian/changelog"
             [ -f "$changelog" ] || quit "debian/changelog not found."
             awk -F'[()]' '{print $2; exit}' "$changelog"
             ;;
         vsix|nodejs)
-            local pkg_json="$root/package.json"
+            local pkg_json="$projectdir/package.json"
             [ -f "$pkg_json" ] || quit "package.json not found."
             jq -r '.version // empty' "$pkg_json"
             ;;
@@ -95,23 +99,41 @@ function get_version() {
 # Get package name
 function get_package_name() {
     local type="$1"
-    local root="$2"
+    local projectdir="$2"
     
     case "$type" in
         debian)
-            local control="$root/debian/control"
+            local control="$projectdir/debian/control"
             local pkg
             if [ -f "$control" ]; then
                 pkg=$(awk -F': ' '/^Source:/ {print $2; exit}' "$control")
             fi
             if [ -z "$pkg" ]; then
-                basename "$root"
+                basename "$projectdir"
             else
                 echo "$pkg"
             fi
             ;;
         vsix|nodejs)
-            jq -r '.name // empty' "$root/package.json"
+            jq -r '.name // empty' "$projectdir/package.json"
+            ;;
+    esac
+}
+
+function make_build_dir() {
+    local type="$1"
+    local projectdir="$2"
+    case "$type" in
+        debian)
+            # mktemp -d "builddir-XXXXXX" --tmpdir ||
+            #     quit "Could not create temporary build directory."
+            echo "${projectdir%/*}"
+            ;;
+        vsix|nodejs)
+            echo "${projectdir}"
+            ;;
+        *)
+            echo "${projectdir}"
             ;;
     esac
 }
@@ -119,17 +141,23 @@ function get_package_name() {
 # Build project by type
 function build_project() {
     local type="$1"
-    local root="$2"
+    local projectdir="$2"
     local version="$3"
-    local pkg="$4"
+    local pkgname="$4"
+    local outputdir="$5"
     
     case "$type" in
         debian)
             _log1 "Building debian package"
+            # if [ -n "${outputdir}" ]; then
+            #     dpkg_buildopts+=( --outdir="${outputdir}" )
+            #     dpkg_buildopts+=( --buildinfo-option=-u${outputdir}" )
+            #     dpkg_buildopts+=( --preserve-envvar=ARTIFACTS_DIR )
+            # fi
             if command -v debuild &>/dev/null; then
-                run debuild "${debuildopts[@]}"
+                run debuild           "${dpkg_buildopts[@]}"
             else
-                run dpkg-buildpackage "${debuildopts[@]}"
+                run dpkg-buildpackage "${dpkg_buildopts[@]}"
             fi
             ;;
         vsix)
@@ -146,20 +174,20 @@ function build_project() {
 # Find release attachments by type
 function find_attachments() {
     local type="$1"
-    local root="$2"
+    local projectdir="$2"
     local version="$3"
     local pkg="$4"
     
     case "$type" in
         vsix)
             local f
-            for f in "$root"/${pkg}-${version}.vsix; do
+            for f in "$projectdir"/${pkg}-${version}.vsix; do
                 [ -f "$f" ] && echo "$f"
             done
             ;;
         nodejs)
             local f
-            for f in "$root"/${pkg}-${version}-dist.zip; do
+            for f in "$projectdir"/${pkg}-${version}-dist.zip; do
                 [ -f "$f" ] && echo "$f"
             done
             ;;
@@ -187,6 +215,22 @@ function find_deb_files() {
     done < <(awk -F': ' '/^Package:/ {print $2}' "$project_dir/debian/control")
 }
 
+function find_artifacts_dir() {
+    local dir="$1"
+    while [ -n "$dir" ]; do
+        if [ -d "$dir/artifacts" ]; then
+            echo "$dir/artifacts"
+            return 0
+        fi
+        local parent_dir="${dir%/*}"
+        if [ "$dir" == "${parent_dir}" ]; then
+            break
+        fi
+        dir="$parent_dir"
+    done
+    return 1
+}
+
 # find .changes file from the build output
 function find_changes_file() {
     local project_dir="$1"
@@ -205,7 +249,7 @@ function find_changes_file() {
 # Get release notes
 function get_release_notes() {
     local type="$1"
-    local root="$2"
+    local projectdir="$2"
     local version="$3"
     local pkg="$4"
     
@@ -214,7 +258,7 @@ function get_release_notes() {
     
     case "$type" in
         debian)
-            local changelog="$root/debian/changelog"
+            local changelog="$projectdir/debian/changelog"
             printf '%s\n\n' "Release ${version}" > "$notes"
             if dpkg-parsechangelog -l "$changelog" -S Changes 2>/dev/null | awk '/^  \* / { sub(/^  \* /, "- "); print }' >> "$notes"; then
                 :
@@ -235,86 +279,127 @@ function get_release_notes() {
 }
 
 function check_prereqs() {
-    local root
-    root=$(git rev-parse --show-toplevel) || quit "Not inside a git repository."
+    local projectdir
+    projectdir=$(git rev-parse --show-toplevel) || quit "Not inside a git repository."
     _log1 "Checking prerequisites..."
     _log1 "  inside git repo"
     
-    local ptype
-    ptype=$(detect_project_type "$root")
-    [ -n "$ptype" ] || quit "Could not detect project type (debian/vsix/nodejs)."
-    _log1 "  project type: $ptype"
+    local project_type
+    project_type=$(detect_project_type "$projectdir")
+    [ -n "$project_type" ] || quit "Could not detect project type (debian/vsix/nodejs)."
+    _log1 "  📌 Project type detected: $project_type"
     
-    case "$ptype" in
+    case "$project_type" in
         debian)
-            command -v debuild &>/dev/null || command -v dpkg-buildpackage &>/dev/null || quit "debuild or dpkg-buildpackage not found."
-            _log1 "  debuild/dpkg-buildpackage available"
+            local n_tool=0
+            if command -v debuild &>/dev/null; then
+                _log1 "  ✅ debuild available"
+                (( n_tool++ ))
+            fi
+            if command -v dpkg-buildpackage &>/dev/null; then
+                _log1 "  ✅ dpkg-buildpackage available"
+                (( n_tool++ ))
+            fi
+            if [ "$n_tool" -eq 0 ]; then
+                quit "debuild or dpkg-buildpackage not found."
+            fi
             ;;
         vsix|nodejs)
-            command -v pnpm &>/dev/null || quit "pnpm not found."
-            _log1 "  pnpm available"
+            if command -v pnpm &>/dev/null; then
+                _log1 "  ✅ pnpm available"
+            else
+                quit "pnpm not found."
+            fi
             ;;
     esac
     
-    command -v gh &>/dev/null || quit "gh CLI not found."
-    gh auth status -h github.com &>/dev/null || quit "gh not authenticated."
-    _log1 "  gh authenticated"
+    if command -v gh &>/dev/null; then
+        _log1 "  ✅ gh CLI available"
+    else
+        quit "gh CLI not found."
+    fi
     
-    echo "$ptype"
+    if gh auth status -h github.com &>/dev/null; then
+        _log1 "  ✅ gh authenticated"
+    else
+        quit "gh not authenticated."
+    fi
+    
+    echo "$project_type"
 }
 
 function main() {
     _log1 "Starting (LOGLEVEL=$LOGLEVEL)"
     
-    local root
-    root=$(git rev-parse --show-toplevel)
-    cd "$root" || quit "Could not cd to repo root $root."
+    local projectdir
+    projectdir=$(git rev-parse --show-toplevel)
+    cd "$projectdir" || quit "Could not cd to repo projectdir $projectdir."
 
     local project_type
     project_type=$(check_prereqs)
     _log1 "Project type: $project_type"
 
-    local version pkg tag
-    version=$(get_version "$project_type" "$root")
+    local version pkgname tag
+    version=$(get_version "$project_type" "$projectdir")
     [ -n "$version" ] || quit "Could not determine version."
-    pkg=$(get_package_name "$project_type" "$root")
-    [ -n "$pkg" ] || pkg=$(basename "$root")
+    pkgname=$(get_package_name "$project_type" "$projectdir")
+    [ -n "$pkgname" ] || pkgname=$(basename "$projectdir")
     tag="v${version}"
-    _log1 "Version: $version  Package: $pkg  Tag: $tag"
+    _log1 "Version: $version  Package: $pkgname  Tag: $tag"
 
-    if [[ -z $opt_force ]]; then
-        if git rev-parse "$tag" &>/dev/null; then
-            quit "Tag $tag already exists locally. Use -f to replace."
+    if [ "$opt_local" == 0 ]; then
+        if [[ -z $opt_force ]]; then
+            if git rev-parse "$tag" &>/dev/null; then
+                quit "Tag $tag already exists locally. Use -f to replace."
+            fi
+            if git ls-remote origin "refs/tags/$tag" 2>/dev/null | grep -q .; then
+                quit "Tag $tag already exists on origin. Use -f to replace."
+            fi
+            if gh release view "$tag" &>/dev/null; then
+                quit "Release $tag already exists. Use -f to replace."
+            fi
+        else
+            _log1 "Force: deleting existing release and tag if present"
+            gh release delete "$tag" --cleanup-tag -y 2>/dev/null || true
+            git tag -d "$tag" 2>/dev/null || true
         fi
-        if git ls-remote origin "refs/tags/$tag" 2>/dev/null | grep -q .; then
-            quit "Tag $tag already exists on origin. Use -f to replace."
-        fi
-        if gh release view "$tag" &>/dev/null; then
-            quit "Release $tag already exists. Use -f to replace."
-        fi
-    else
-        _log1 "Force: deleting existing release and tag if present"
-        gh release delete "$tag" --cleanup-tag -y 2>/dev/null || true
-        git tag -d "$tag" 2>/dev/null || true
     fi
 
     # Build the project
-    build_project "$project_type" "$root" "$version" "$pkg"
+    if local builddir=$(make_build_dir "$project_type" "$projectdir"); then
+        _log1 "📝 Build directory: $builddir"
+    else
+        quit "Could not create temporary build directory."
+    fi
 
-    # find .deb files and install
-        local debdir=$(dirname "$root")
+    # builddir not work, yet
+    # --outdir, --buildinfo-option=-u... not working.
+    if ! build_project "$project_type" "$projectdir" "$version" "$pkgname"; then
+        quit "Build failed."
+        return 1
+    fi
+
+    if [ "$project_type" == "debian" ]; then
+      # find .deb files and install
+        local debdir="$builddir"
         local deb_files=()
         while IFS= read -r deb; do
             [ -n "$deb" ] && deb_files+=( "$deb" )
-        done < <(find_deb_files "$root" "$debdir" "$version" )
+        done < <(find_deb_files "$projectdir" "$debdir" "$version" )
         [ ${#deb_files[@]} -gt 0 ] || quit "No .deb files found."
         _log1 "Debian files: ${deb_files[*]}"
+
+        # find artifacts/ dir in parents and copy builddir/* to it
+        # local artifacts_dir=$(find_artifacts_dir "$projectdir") ||
+        #     quit "Could not find artifacts directory."
+        # _log1 "Copying builddir/* to artifacts directory: $artifacts_dir"
+        # run cp -r "$builddir"/* "$artifacts_dir/"
 
         # install .deb packages, dput changes
         sudo dpkg -i "${deb_files[@]}"
 
-    # find .changes file and dput
-        local changes_file=$(find_changes_file "$root" "$debdir" "$version")
+      # find .changes file and dput
+        local changes_file=$(find_changes_file "$projectdir" "$debdir" "$version")
         [ -n "$changes_file" ] || quit "No .changes file found."
         _log1 "Changes file: $changes_file"
 
@@ -322,22 +407,30 @@ function main() {
         # for deb in "${deb_files[@]}"; do
         #     dpkg-sig -k Lenik -s builder "${deb}"
         # done
-        dput -f bodz "${changes_file}"
+
+        if [ "$opt_local" == 0 ]; then
+            dput -f bodz "${changes_file}"
+        fi
+    fi
+
+    if [ "$opt_local" == 1 ]; then
+        return 0
+    fi
 
     # Find attachments
         local attachments=( "${deb_files[@]}" )
         local att
         while IFS= read -r att; do
             [ -n "$att" ] && attachments+=( "$att" )
-        done < <(find_attachments "$project_type" "$root" "$version" "$pkg")
+        done < <(find_attachments "$project_type" "$projectdir" "$version" "$pkgname")
         [ ${#attachments[@]} -gt 0 ] || quit "No build artifacts produced."
         _log1 "Attachments: ${attachments[*]}"
 
     # create source tarball
         local tarball
         _log1 "Creating source tarball preserving original sources"
-        tarball="${pkg}-${version}.tar.gz"
-        run git archive --format=tar.gz --prefix="${pkg}-${version}/" -o "$tarball" HEAD
+        tarball="${pkgname}-${version}.tar.gz"
+        run git archive --format=tar.gz --prefix="${pkgname}-${version}/" -o "$tarball" HEAD
 
     # create tag and push
         if ! git rev-parse "$tag" &>/dev/null; then
@@ -351,14 +444,14 @@ function main() {
         fi
 
     # Get release notes
-    local notes
-    notes=$(get_release_notes "$project_type" "$root" "$version" "$pkg")
-    trap 'rm -f "$notes"' EXIT
+        local notes
+        notes=$(get_release_notes "$project_type" "$projectdir" "$version" "$pkgname")
+        trap 'rm -f "$notes"' EXIT
 
-    _log1 "Creating GitHub release $tag"
-    run gh release create "$tag" "$tarball" "${attachments[@]}" --title "$tag" --notes-file "$notes"
+        _log1 "Creating GitHub release $tag"
+        run gh release create "$tag" "$tarball" "${attachments[@]}" --title "$tag" --notes-file "$notes"
 
-    echo "Created release $tag"
+        echo "Created release $tag"
 }
 
 boot "$@"
