@@ -365,6 +365,17 @@ function main() {
         fi
     fi
 
+    # create tag and push
+        if ! git rev-parse "$tag" &>/dev/null; then
+            _log1 "Creating tag $tag"
+            run git tag "$tag"
+        fi
+        if [[ -n $opt_force ]]; then
+            run git push -f origin "$tag"
+        else
+            run git push origin "$tag"
+        fi
+
     # Build the project
     if local builddir=$(make_build_dir "$project_type" "$projectdir"); then
         _log1 "📝 Build directory: $builddir"
@@ -431,17 +442,6 @@ function main() {
         _log1 "Creating source tarball preserving original sources"
         tarball="${pkgname}-${version}.tar.gz"
         run git archive --format=tar.gz --prefix="${pkgname}-${version}/" -o "$tarball" HEAD
-
-    # create tag and push
-        if ! git rev-parse "$tag" &>/dev/null; then
-            _log1 "Creating tag $tag"
-            run git tag "$tag"
-        fi
-        if [[ -n $opt_force ]]; then
-            run git push -f origin "$tag"
-        else
-            run git push origin "$tag"
-        fi
 
     # Get release notes
         local notes

@@ -1,4 +1,11 @@
-gh-utils-lenik (1.4.2) testing; urgency=medium
+gh-utils-lenik (1.4.3) unstable; urgency=medium
+
+  * Update git tag before building the project. 
+    So auto version extraction works with recent git tag.
+
+ -- Lenik (谢继雷) <lenik@bodz.net>  Fri, 03 Apr 2026 20:13:33 +0800
+
+gh-utils-lenik (1.4.2) unstable; urgency=medium
 
   * Add -l/--local option, to no tag/push/release.
 
